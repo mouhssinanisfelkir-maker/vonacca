@@ -1,0 +1,55 @@
+name: vona-academy
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vona}
+      POSTGRES_USER: ${POSTGRES_USER:-vona}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans le fichier .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://${POSTGRES_USER:-vona}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-vona}
+      JWT_SECRET: ${JWT_SECRET:?Définissez JWT_SECRET dans le fichier .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@vona.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Définissez ADMIN_PASSWORD dans le fichier .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      MAX_VIDEO_MB: ${MAX_VIDEO_MB:-2048}
+      VIDEO_DIR: /data/videos
+    volumes:
+      - video_data:/data/videos
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+
+volumes:
+  db_data:
+  video_data:
